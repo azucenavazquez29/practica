@@ -1,5 +1,5 @@
 <?php
-include 'read.php'; // trae $actors
+include 'read.php'; // Base de datos 
 ?>
 <!DOCTYPE html>
 <html>
