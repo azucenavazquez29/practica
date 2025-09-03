@@ -1,72 +1,93 @@
 <?php
-include 'config.php';
+// Configuración de conexión a la base de datos
+$host = "localhost";
+$user = "root";       // tu usuario
+$pass = "";           // tu contraseña
+$db   = "sakila";     // base de datos
 
+$conexion = new mysqli($host, $user, $pass, $db);
+if ($conexion->connect_errno) {
+    http_response_code(500);
+    echo json_encode(["error" => "Error de conexión: " . $conexion->connect_error]);
+    exit;
+}
+
+// Configurar cabeceras
+header("Content-Type: application/json; charset=UTF-8");
+
+// Detectar método y recurso
 $method = $_SERVER['REQUEST_METHOD'];
-$id = isset($_GET['id']) ? intval($_GET['id']) : null;
+$request = explode("/", trim($_SERVER['PATH_INFO'] ?? '', "/"));
+$resource = $request[0] ?? null;
+$id = $request[1] ?? null;
 
-// Leer datos JSON de PUT y POST
-$input = json_decode(file_get_contents('php://input'), true);
+if ($resource !== "actor") {
+    http_response_code(404);
+    echo json_encode(["error" => "Recurso no encontrado"]);
+    exit;
+}
 
-switch($method) {
-
+// Métodos CRUD
+switch ($method) {
     case 'GET':
         if ($id) {
-            $stmt = $conn->prepare("SELECT actor_id, first_name, last_name FROM actor WHERE actor_id = ?");
+            $sql = "SELECT * FROM actor WHERE actor_id = ?";
+            $stmt = $conexion->prepare($sql);
             $stmt->bind_param("i", $id);
             $stmt->execute();
-            $result = $stmt->get_result()->fetch_assoc();
-            echo json_encode($result);
+            $res = $stmt->get_result()->fetch_assoc();
+            echo json_encode($res ?: ["mensaje" => "No encontrado"]);
         } else {
-            $result = $conn->query("SELECT actor_id, first_name, last_name FROM actor");
-            $data = [];
-            while($row = $result->fetch_assoc()) {
-                $data[] = $row;
-            }
-            echo json_encode($data);
+            $sql = "SELECT * FROM actor";
+            $res = $conexion->query($sql);
+            echo json_encode($res->fetch_all(MYSQLI_ASSOC));
         }
         break;
 
     case 'POST':
-        if (!isset($input['first_name']) || !isset($input['last_name'])) {
-            echo json_encode(["error"=>"Faltan datos"]);
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (!isset($data["first_name"], $data["last_name"])) {
+            http_response_code(400);
+            echo json_encode(["error" => "Faltan campos"]);
             exit;
         }
-        $stmt = $conn->prepare("INSERT INTO actor (first_name, last_name) VALUES (?, ?)");
-        $stmt->bind_param("ss", $input['first_name'], $input['last_name']);
-        if ($stmt->execute()) {
-            echo json_encode(["message"=>"Actor creado", "id"=>$stmt->insert_id]);
-        } else {
-            echo json_encode(["error"=>$stmt->error]);
-        }
+        $sql = "INSERT INTO actor (first_name, last_name, last_update) VALUES (?, ?, NOW())";
+        $stmt = $conexion->prepare($sql);
+        $stmt->bind_param("ss", $data["first_name"], $data["last_name"]);
+        $stmt->execute();
+        echo json_encode(["mensaje" => "Actor creado", "id" => $conexion->insert_id]);
         break;
 
     case 'PUT':
-        if (!$id) { echo json_encode(["error"=>"Falta el id"]); exit; }
-        if (!isset($input['first_name']) || !isset($input['last_name'])) {
-            echo json_encode(["error"=>"Faltan datos"]); exit;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["error" => "Falta ID"]);
+            exit;
         }
-        $stmt = $conn->prepare("UPDATE actor SET first_name = ?, last_name = ? WHERE actor_id = ?");
-        $stmt->bind_param("ssi", $input['first_name'], $input['last_name'], $id);
-        if ($stmt->execute()) {
-            echo json_encode(["message"=>"Actor actualizado"]);
-        } else {
-            echo json_encode(["error"=>$stmt->error]);
-        }
+        $data = json_decode(file_get_contents("php://input"), true);
+        $sql = "UPDATE actor SET first_name = ?, last_name = ?, last_update = NOW() WHERE actor_id = ?";
+        $stmt = $conexion->prepare($sql);
+        $stmt->bind_param("ssi", $data["first_name"], $data["last_name"], $id);
+        $stmt->execute();
+        echo json_encode(["mensaje" => "Actor actualizado"]);
         break;
 
     case 'DELETE':
-        if (!$id) { echo json_encode(["error"=>"Falta el id"]); exit; }
-        $stmt = $conn->prepare("DELETE FROM actor WHERE actor_id = ?");
-        $stmt->bind_param("i", $id);
-        if ($stmt->execute()) {
-            echo json_encode(["message"=>"Actor eliminado"]);
-        } else {
-            echo json_encode(["error"=>$stmt->error]);
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["error" => "Falta ID"]);
+            exit;
         }
+        $sql = "DELETE FROM actor WHERE actor_id = ?";
+        $stmt = $conexion->prepare($sql);
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        echo json_encode(["mensaje" => "Actor eliminado"]);
         break;
 
     default:
-        echo json_encode(["error"=>"Método no soportado"]);
+        http_response_code(405);
+        echo json_encode(["error" => "Método no permitido"]);
         break;
 }
 ?>
