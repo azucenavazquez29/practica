@@ -17,7 +17,11 @@ header("Content-Type: application/json; charset=UTF-8");
 
 // Detectar método y recurso
 $method = $_SERVER['REQUEST_METHOD'];
-$request = explode("/", trim($_SERVER['PATH_INFO'] ?? '', "/"));
+
+// Intentar leer el recurso desde PATH_INFO o ?r=
+$requestUri = $_SERVER['PATH_INFO'] ?? ($_GET['r'] ?? '');
+$request = explode("/", trim($requestUri, "/"));
+
 $resource = $request[0] ?? null;
 $id = $request[1] ?? null;
 
